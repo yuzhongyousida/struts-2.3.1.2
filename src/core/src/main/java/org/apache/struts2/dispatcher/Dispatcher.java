@@ -91,151 +91,80 @@ import java.util.Enumeration;
  */
 public class Dispatcher {
 
-    /**
-     * Provide a logging instance.
-     */
     private static final Logger LOG = LoggerFactory.getLogger(Dispatcher.class);
 
-    /**
-     * Provide a thread local instance.
-     */
-    private static ThreadLocal<Dispatcher> instance = new ThreadLocal<Dispatcher>();
+    private static ThreadLocal<Dispatcher> instance = new ThreadLocal<Dispatcher>();//本地线程实例
+    private static List<DispatcherListener> dispatcherListeners = new CopyOnWriteArrayList<DispatcherListener>();//存储DispatcherListeners的list
+    private ConfigurationManager configurationManager;//存储ConfigurationManager实例，ConfigurationManager实例是根据每个struts的xml和properties配置文件用加载器解析后生成的key-value对
+
+    private boolean devMode;//开发模式是否开启属性设置
+    private String defaultEncoding;//StrutsConstants.STRUTS_I18N_ENCODING属性值设置
+    private String defaultLocale;//StrutsConstants.STRUTS_LOCALE属性设置
+    private String multipartSaveDir;//StrutsConstants.STRUTS_MULTIPART_SAVEDIR属性设置
+    private String multipartHandlerName;//StrutsConstants.STRUTS_MULTIPART_HANDLER属性设置
+    private static final String DEFAULT_CONFIGURATION_PATHS = "struts-default.xml,struts-plugin.xml,struts.xml";//struts默认的配置文件
+    private boolean paramsWorkaroundEnabled = false;//STRUTS_DISPATCHER_PARAMETERSWORKAROUND属性值设置
+
+
+    private ServletContext servletContext;
+    private Map<String, String> initParams;//存储web.xml配置filter时设置的属性
+    private ValueStackFactory valueStackFactory;
 
     /**
-     * Store list of DispatcherListeners.
-     */
-    private static List<DispatcherListener> dispatcherListeners =
-        new CopyOnWriteArrayList<DispatcherListener>();
-
-    /**
-     * Store ConfigurationManager instance, set on init.
-     * 存储ConfigurationManager实例，在Dispatcher init的时候设置
-     */
-    private ConfigurationManager configurationManager;
-
-    /**
-     * Store state of  StrutsConstants.STRUTS_DEVMODE setting.
-     */
-    private boolean devMode;
-
-    /**
-     * Store state of StrutsConstants.STRUTS_I18N_ENCODING setting.
-     */
-    private String defaultEncoding;
-
-    /**
-     * Store state of StrutsConstants.STRUTS_LOCALE setting.
-     */
-    private String defaultLocale;
-
-    /**
-     * Store state of StrutsConstants.STRUTS_MULTIPART_SAVEDIR setting.
-     */
-    private String multipartSaveDir;
-
-    /**
-     * Stores the value of StrutsConstants.STRUTS_MULTIPART_HANDLER setting
-     */
-    private String multipartHandlerName;
-
-    /**
-     * Provide list of default configuration files.
-     */
-    private static final String DEFAULT_CONFIGURATION_PATHS = "struts-default.xml,struts-plugin.xml,struts.xml";
-
-    /**
-     * Store state of STRUTS_DISPATCHER_PARAMETERSWORKAROUND.
-     * <p/>
-     * The workaround is for WebLogic.
-     * We try to autodect WebLogic on Dispatcher init.
-     * The workaround can also be enabled manually.
-     */
-    private boolean paramsWorkaroundEnabled = false;
-
-    /**
-     * Provide the dispatcher instance for the current thread.
-     *
-     * @return The dispatcher instance
+     * 获得当前线程中的dispatcher实例方法
      */
     public static Dispatcher getInstance() {
         return instance.get();
     }
 
     /**
-     * Store the dispatcher instance for this thread.
-     *
-     * @param instance The instance
+     * 设置当前线程中的dispatcher实例方法
      */
     public static void setInstance(Dispatcher instance) {
         Dispatcher.instance.set(instance);
     }
 
     /**
-     * Add a dispatcher lifecycle listener.
-     *
-     * @param listener The listener to add
+     * 增加dispatcher生命周期中的listener的方法
      */
     public static void addDispatcherListener(DispatcherListener listener) {
         dispatcherListeners.add(listener);
     }
 
     /**
-     * Remove a specific dispatcher lifecycle listener.
-     *
-     * @param listener The listener
+     * 移除dispatcher生命周期中的某个listener的方法
      */
     public static void removeDispatcherListener(DispatcherListener listener) {
         dispatcherListeners.remove(listener);
     }
 
-    private ServletContext servletContext;
-    private Map<String, String> initParams;
 
-    private ValueStackFactory valueStackFactory;
 
 
     /**
-     * Create the Dispatcher instance for a given ServletContext and set of initialization parameters.
-     * 创建一个给定的ServletContext和设置初始化参数的Dispatcher实例
-     * @param servletContext Our servlet context
-     * @param initParams The set of initialization parameters
+     * 有参构造方法
      */
     public Dispatcher(ServletContext servletContext, Map<String, String> initParams) {
         this.servletContext = servletContext;
         this.initParams = initParams;
     }
 
-    /**
-     * Modify state of StrutsConstants.STRUTS_DEVMODE setting.
-     * @param mode New setting
-     */
+
     @Inject(StrutsConstants.STRUTS_DEVMODE)
     public void setDevMode(String mode) {
         devMode = "true".equals(mode);
     }
 
-    /**
-     * Modify state of StrutsConstants.STRUTS_LOCALE setting.
-     * @param val New setting
-     */
     @Inject(value=StrutsConstants.STRUTS_LOCALE, required=false)
     public void setDefaultLocale(String val) {
         defaultLocale = val;
     }
 
-    /**
-     * Modify state of StrutsConstants.STRUTS_I18N_ENCODING setting.
-     * @param val New setting
-     */
     @Inject(StrutsConstants.STRUTS_I18N_ENCODING)
     public void setDefaultEncoding(String val) {
         defaultEncoding = val;
     }
 
-    /**
-     * Modify state of StrutsConstants.STRUTS_MULTIPART_SAVEDIR setting.
-     * @param val New setting
-     */
     @Inject(StrutsConstants.STRUTS_MULTIPART_SAVEDIR)
     public void setMultipartSaveDir(String val) {
         multipartSaveDir = val;
@@ -252,7 +181,7 @@ public class Dispatcher {
     }
 
     /**
-     * Releases all instances bound to this dispatcher instance.
+     * 解除当前dispatcher实例的所有绑定实例方法
      */
     public void cleanup() {
 
@@ -323,6 +252,7 @@ public class Dispatcher {
 
     /**
      * 初始化struts的xml文件的配置provider信息
+     * 该方法会被init()方法调用
      */
     private void init_TraditionalXmlConfigurations() {
         //1、-------------获取web.xml的init-param配置中的config名称对应的值（struts-default.xml,struts-plugin.xml,struts.xml等struts的配置文件路径），若无，则取默认配置，一般改动了struts.xml文件的默认路径后配置该属性
@@ -348,10 +278,23 @@ public class Dispatcher {
         }
     }
 
+    /**
+     * xwork.xml文件对应生成XmlConfigurationProvider实例的方法
+     * @param filename
+     * @param errorIfMissing
+     * @return
+     */
     protected XmlConfigurationProvider createXmlConfigurationProvider(String filename, boolean errorIfMissing) {
         return new XmlConfigurationProvider(filename, errorIfMissing);
     }
 
+    /**
+     * 非xwork.xml文件的*.xml文件对应生成XmlConfigurationProvider实例的方法
+     * @param filename
+     * @param errorIfMissing
+     * @param ctx
+     * @return
+     */
     protected XmlConfigurationProvider createStrutsXmlConfigurationProvider(String filename, boolean errorIfMissing, ServletContext ctx) {
         return new StrutsXmlConfigurationProvider(filename, errorIfMissing, ctx);
     }
@@ -596,20 +539,22 @@ public class Dispatcher {
     public Map<String,Object> createContextMap(HttpServletRequest request, HttpServletResponse response,
             ActionMapping mapping, ServletContext context) {
 
-        // request map wrapping the http request objects
+        //-------HttpServletRequest对象对应的map
         Map requestMap = new RequestMap(request);
 
-        // parameters map wrapping the http parameters.  ActionMapping parameters are now handled and applied separately
-        Map params = new HashMap(request.getParameterMap());
+        //-------request中的参数对应的map
+        Map params = new HashMap(request.getParameterMap());// parameters map wrapping the http parameters.  ActionMapping parameters are now handled and applied separately
 
-        // session map wrapping the http session
-        Map session = new SessionMap(request);
+        //-------session对象对应的map
+        Map session = new SessionMap(request);// session map wrapping the http session
 
-        // application map wrapping the ServletContext
-        Map application = new ApplicationMap(context);
+        //-------application对象对应的map
+        Map application = new ApplicationMap(context);// application map wrapping the ServletContext
 
+        //-------将以上所有的map封装到一个总的map对象中（每种类型的map都有其对应的key值）
         Map<String,Object> extraContext = createContextMap(requestMap, params, session, application, request, response, context);
 
+        //-------ActionMapping对应的map单独封装到总的map对象中
         if (mapping != null) {
             extraContext.put(ServletActionContext.ACTION_MAPPING, mapping);
         }
@@ -718,7 +663,7 @@ public class Dispatcher {
 
     /**
      * Prepare a request, including setting the encoding and locale.
-     *
+     * 为请求对象做准备，包括设置编码格式和Local
      * @param request The request
      * @param response The response
      */
@@ -752,6 +697,7 @@ public class Dispatcher {
 
     /**
      * Wrap and return the given request or return the original request object.
+     * 对request对象做包装
      * </p>
      * This method transparently handles multipart data as a wrapped class around the given request.
      * Override this method to handle multipart requests in a special way or to handle other types of requests.
@@ -765,11 +711,12 @@ public class Dispatcher {
      * @throws java.io.IOException on any error.
      */
     public HttpServletRequest wrapRequest(HttpServletRequest request, ServletContext servletContext) throws IOException {
-        // don't wrap more than once
+        //1、---------若request对象就已经是StrutsRequestWrapper类型的，就直接返回，避免出现二次包装
         if (request instanceof StrutsRequestWrapper) {
             return request;
         }
 
+        //2、---------如果content_type是"multipart/form-data"（文件上传请求），则包装成MultiPartRequestWrapper对象
         String content_type = request.getContentType();
         if (content_type != null && content_type.contains("multipart/form-data")) {
             MultiPartRequest mpr = null;
@@ -787,6 +734,7 @@ public class Dispatcher {
             }
             request = new MultiPartRequestWrapper(mpr, request, getSaveDir(servletContext));
         } else {
+            //3、---------如果content_type是非"multipart/form-data"类型的，则包装成StrutsRequestWrapper类型对象
             request = new StrutsRequestWrapper(request);
         }
 

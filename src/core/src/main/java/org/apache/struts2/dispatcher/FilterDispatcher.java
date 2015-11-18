@@ -54,98 +54,13 @@ import com.opensymphony.xwork2.util.logging.LoggerFactory;
 import com.opensymphony.xwork2.util.profiling.UtilTimerStack;
 
 /**
- * Master filter for Struts that handles four distinct
- * responsibilities:
- * <p/>
- * <ul>
- * <p/>
- * <li>Executing actions</li>
- * <p/>
- * <li>Cleaning up the {@link ActionContext} (see note)</li>
- * <p/>
- * <li>Serving static content</li>
- * <p/>
- * <li>Kicking off XWork's interceptor chain for the request lifecycle</li>
- * <p/>
- * </ul>
- * <p/>
- * <p/> <b>IMPORTANT</b>: this filter must be mapped to all requests. Unless you know exactly what you are doing, always
- * map to this URL pattern: /*
- * <p/>
- * <p/> <b>Executing actions</b>
- * <p/>
- * <p/> This filter executes actions by consulting the {@link ActionMapper} and determining if the requested URL should
- * invoke an action. If the mapper indicates it should, <b>the rest of the filter chain is stopped</b> and the action is
- * invoked. This is important, as it means that filters like the SiteMesh filter must be placed <b>before</b> this
- * filter or they will not be able to decorate the output of actions.
- * <p/>
- * <p/> <b>Cleaning up the {@link ActionContext}</b>
- * <p/>
- * <p/> This filter will also automatically clean up the {@link ActionContext} for you, ensuring that no memory leaks
- * take place. However, this can sometimes cause problems integrating with other products like SiteMesh. See {@link
- * ActionContextCleanUp} for more information on how to deal with this.
- * <p/>
- * <p/> <b>Serving static content</b>
- * <p/>
- * <p/> This filter also serves common static content needed when using various parts of Struts, such as JavaScript
- * files, CSS files, etc. It works by looking for requests to /struts/*, and then mapping the value after "/struts/"
- * to common packages in Struts and, optionally, in your class path. By default, the following packages are
- * automatically searched:
- * <p/>
- * <ul>
- * <p/>
- * <li>org.apache.struts2.static</li>
- * <p/>
- * <li>template</li>
- * <p/>
- * </ul>
- * <p/>
- * <p/> This means that you can simply request /struts/xhtml/styles.css and the XHTML UI theme's default stylesheet
- * will be returned. Likewise, many of the AJAX UI components require various JavaScript files, which are found in the
- * org.apache.struts2.static package. If you wish to add additional packages to be searched, you can add a comma
- * separated (space, tab and new line will do as well) list in the filter init parameter named "packages". <b>Be
- * careful</b>, however, to expose any packages that may have sensitive information, such as properties file with
- * database access credentials.
- * <p/>
- * <p/>
- * <p/>
- * <p>
- * <p/>
- * This filter supports the following init-params:
- * <!-- START SNIPPET: params -->
- * <p/>
- * <ul>
- * <p/>
- * <li><b>config</b> - a comma-delimited list of XML configuration files to load.</li>
- * <p/>
- * <li><b>actionPackages</b> - a comma-delimited list of Java packages to scan for Actions.</li>
- * <p/>
- * <li><b>configProviders</b> - a comma-delimited list of Java classes that implement the
- * {@link ConfigurationProvider} interface that should be used for building the {@link Configuration}.</li>
- * <p/>
- * <li><b>loggerFactory</b> - The class name of the {@link LoggerFactory} implementation.</li>
- * <p/>
- * <li><b>*</b> - any other parameters are treated as framework constants.</li>
- * <p/>
- * </ul>
- * <p/>
- * <!-- END SNIPPET: params -->
- * <p/>
- * </p>
- * <p/>
- * To use a custom {@link Dispatcher}, the <code>createDispatcher()</code> method could be overriden by
- * the subclass.
+ * FilterDispatcher是struts2.0.x到2.1.2版本的核心过滤器
+ * 自2.1.3开始StrutsPrepareAndExecuteFilter就开始取代了FilterDispatcher。
+ * 原因如下：
+ * StrutsPrepareAndExecuteFilter是StrutsPrepareFilter和StrutsExecuteFilter的组合,
+ * 在核心filter执行时是分两步的，中间可以嵌入一些用户自定义的filter,但是必须在web.xml文件的配置时放在struts的filter的前面，否则不会生效。
+ * 但是FilterDispatcher是不可以这样的
  *
- * @version $Date: 2011-02-08 23:24:30 +0100 (Tue, 08 Feb 2011) $ $Id: FilterDispatcher.java 1068626 2011-02-08 22:24:30Z jafl $
- * @deprecated Since Struts 2.1.3, use {@link org.apache.struts2.dispatcher.ng.filter.StrutsPrepareAndExecuteFilter} instead or
- * {@link org.apache.struts2.dispatcher.ng.filter.StrutsPrepareFilter} and {@link org.apache.struts2.dispatcher.ng.filter.StrutsExecuteFilter}
- * if needing using the {@link ActionContextCleanUp} filter in addition to this one
- *
- * @see ActionMapper
- * @see ActionContextCleanUp
- * @see org.apache.struts2.dispatcher.ng.filter.StrutsPrepareAndExecuteFilter
- * @see org.apache.struts2.dispatcher.ng.filter.StrutsPrepareFilter
- * @see org.apache.struts2.dispatcher.ng.filter.StrutsExecuteFilter
  */
 public class FilterDispatcher implements StrutsStatics, Filter {
 

@@ -60,24 +60,31 @@ public class PrepareOperations {
 
     /**
      * Creates the action context and initializes the thread local
+     * 创建action上下文环境 且 初始化本地线程
      */
     public ActionContext createActionContext(HttpServletRequest request, HttpServletResponse response) {
         ActionContext ctx;
         Integer counter = 1;
+        //1、----------将总的action上下文环境计数器加1
         Integer oldCounter = (Integer) request.getAttribute(CLEANUP_RECURSION_COUNTER);
         if (oldCounter != null) {
             counter = oldCounter + 1;
         }
-        
+
+        //2、----------获取当前线程中的已存在的老的action上线文对象（若不为空，则说明当前请求是在forward请求中，在用老的action上线文对象初始化的实例赋值给当前请求的action上下文；否则新建一个新的赋值给当前请求的action上线文对象）
         ActionContext oldContext = ActionContext.getContext();
         if (oldContext != null) {
-            // detected existing context, so we are probably in a forward
-            ctx = new ActionContext(new HashMap<String, Object>(oldContext.getContextMap()));
+            ctx = new ActionContext(new HashMap<String, Object>(oldContext.getContextMap()));// detected existing context, so we are probably in a forward
         } else {
+            //3、----------创建值栈对象，并用request中的值初始化
             ValueStack stack = dispatcher.getContainer().getInstance(ValueStackFactory.class).createValueStack();
             stack.getContext().putAll(dispatcher.createContextMap(request, response, null, servletContext));
+
+            //4、----------初始化ActionContext实例对象
             ctx = new ActionContext(stack.getContext());
         }
+
+        //5、----------计数器和ActionContext实例对象对应属性的设置和返回
         request.setAttribute(CLEANUP_RECURSION_COUNTER, counter);
         ActionContext.setContext(ctx);
         return ctx;
@@ -147,13 +154,17 @@ public class PrepareOperations {
 
     /**
      * Finds and optionally creates an {@link ActionMapping}.  if forceLookup is false, it first looks in the current request to see if one
+     *
      * has already been found, otherwise, it creates it and stores it in the request.  No mapping will be created in the
      * case of static resource requests or unidentifiable requests for other servlets, for example.
      * @param forceLookup if true, the action mapping will be looked up from the ActionMapper instance, ignoring if there is one
      * in the request or not 
      */
     public ActionMapping findActionMapping(HttpServletRequest request, HttpServletResponse response, boolean forceLookup) {
+        //1、----------取出request请求的key值（struts.actionMapping）对应的ActionMapping对象（一般action请求   ）
         ActionMapping mapping = (ActionMapping) request.getAttribute(STRUTS_ACTION_MAPPING_KEY);
+
+        //2、----------request没有ActionMapping对象属性则新建一个
         if (mapping == null || forceLookup) {
             try {
                 mapping = dispatcher.getContainer().getInstance(ActionMapper.class).getMapping(request, dispatcher.getConfigurationManager());

@@ -104,8 +104,8 @@ public class InitOperations {
         return dispatcher;
     }
 
+
     /**
-     * Create a {@link Dispatcher}
      * 创建Dispatcher对象
      */
     private Dispatcher createDispatcher( HostConfig filterConfig ) {
@@ -123,6 +123,10 @@ public class InitOperations {
         return new Dispatcher(filterConfig.getServletContext(), params);
     }
 
+
+    /**
+     * 清理action上线文
+     */
     public void cleanup() {
         ActionContext.setContext(null);
     }

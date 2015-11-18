@@ -42,9 +42,9 @@ import java.util.regex.Pattern;
  *
  */
 public class StrutsPrepareAndExecuteFilter implements StrutsStatics, Filter {
-    protected PrepareOperations prepare;
-    protected ExecuteOperations execute;
-	protected List<Pattern> excludedPatterns = null;
+    protected PrepareOperations prepare;//为请求做准备的操作容器实例对象
+    protected ExecuteOperations execute;//执行请求的操作容器实例对象
+	protected List<Pattern> excludedPatterns = null;//存储不由struts2处理的路径对应的Pattern对象的List（StrutsConstants.STRUTS_ACTION_EXCLUDE_PATTERN的属性配置值）
 
     /**
      * filter的初始化方法
@@ -68,10 +68,14 @@ public class StrutsPrepareAndExecuteFilter implements StrutsStatics, Filter {
             //5、----------用struts filter的配置初始化静态内容加载器
             init.initStaticContentLoader(config, dispatcher);
 
+            //6、----------准备操作容器对象和执行操作容器对象的初始化（这就是StrutsPrepareAndExecuteFilter优于老版本FilterDispatcherListener的地方）
             prepare = new PrepareOperations(filterConfig.getServletContext(), dispatcher);
             execute = new ExecuteOperations(filterConfig.getServletContext(), dispatcher);
+
+            //7、----------根据StrutsConstants.STRUTS_ACTION_EXCLUDE_PATTERN的属性配置值，获取不由struts2处理的路径对应的Pattern对象的List，赋值给excludedPatterns属性
 			this.excludedPatterns = init.buildExcludedPatternsList(dispatcher);
 
+            //8、----------初始化后的回掉
             postInit(dispatcher, filterConfig);
         } finally {
             init.cleanup();
@@ -85,30 +89,53 @@ public class StrutsPrepareAndExecuteFilter implements StrutsStatics, Filter {
     protected void postInit(Dispatcher dispatcher, FilterConfig filterConfig) {
     }
 
+    /**
+     * 过滤器主体逻辑
+     * @param req
+     * @param res
+     * @param chain
+     * @throws IOException
+     * @throws ServletException
+     */
     public void doFilter(ServletRequest req, ServletResponse res, FilterChain chain) throws IOException, ServletException {
 
+        //1、----------转换request和response对象
         HttpServletRequest request = (HttpServletRequest) req;
         HttpServletResponse response = (HttpServletResponse) res;
 
         try {
+            //2、----------设置请求准备操作的编码方式和Local
             prepare.setEncodingAndLocale(request, response);
+
+            //3、----------创建action上下文环境对象
             prepare.createActionContext(request, response);
+
+            //4、----------将Dispatcher对象赋值给当前线程
             prepare.assignDispatcherToThread();
+
+            //5、----------判断请求URL是否属于配置的不由struts2处理的URL中的一个
 			if ( excludedPatterns != null && prepare.isUrlExcluded(request, excludedPatterns)) {
 				chain.doFilter(request, response);
 			} else {
+                //6、----------将request对象包装成StrutsRequestWrapper类型或其子类型MultiPartRequestWrapper
 				request = prepare.wrapRequest(request);
+
+                //7、----------获取请求action对应的ActionMapping对象
 				ActionMapping mapping = prepare.findActionMapping(request, response, true);
-				if (mapping == null) {
+
+                //8、----------若找不到请求action对应的ActionMapping对象，则判断一下是否是请求静态资源
+                if (mapping == null) {
 					boolean handled = execute.executeStaticResourceRequest(request, response);
 					if (!handled) {
 						chain.doFilter(request, response);
 					}
 				} else {
+                    //9、----------若找的到对应的ActionMapping对象，则进入对应的action中进行业务处理逻辑
 					execute.executeAction(request, response, mapping);
 				}
 			}
         } finally {
+            //10、----------清理PrepareOperations本地线程中的request对象（为下次请求做准备）
             prepare.cleanupRequest(request);
         }
     }
